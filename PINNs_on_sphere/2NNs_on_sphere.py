@@ -398,6 +398,7 @@ for epoch in range(epochs):
         L2_values = np.append(L2_values, L2)
         l_values = np.append(l_values, l)
         print(pd.DataFrame(history_rows).to_string(index=False, float_format="{:.10e}".format))
+        print("=" * 70)
     
 # Record the end time of training NN_2
 end = time.time()
