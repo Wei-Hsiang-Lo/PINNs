@@ -250,12 +250,12 @@ def DNN_builder(name, in_shape = 2, out_shape = 1, hidden_layers = 6, neurons = 
     return model
 
 tf.keras.backend.clear_session()
-model_1 = DNN_builder(f"DNN-1", 2, 1, 6, 32, "tanh")
+model_1 = DNN_builder(f"DNN-1", 2, 1, 6, 64, "tanh")
 model_1.summary()
 tf.keras.utils.plot_model(model_1, show_shapes=True, show_layer_names=True, show_dtype=True, show_layer_activations=True)
 
 tf.keras.backend.clear_session()
-model_2 = DNN_builder(f"DNN-2", 2, 1, 6, 32, "tanh")
+model_2 = DNN_builder(f"DNN-2", 2, 1, 6, 64, "tanh")
 model_2.summary()
 tf.keras.utils.plot_model(model_2, show_shapes=True, show_layer_names=True, show_dtype=True, show_layer_activations=True)
 
@@ -435,8 +435,8 @@ Y = R_*np.sin(Theta_)
 x_tf = tf.convert_to_tensor(X.flatten().reshape(-1, 1), dtype=tf.float64)
 y_tf = tf.convert_to_tensor(Y.flatten().reshape(-1, 1), dtype=tf.float64)
 
-U_pred = u1(tf.atan(tf.sqrt(tf.square(x_tf)+tf.square(y_tf))), tf.atan2(y_tf/x_tf)).numpy().reshape(Nr, Ntheta)
-U_true = tru(tf.atan(tf.sqrt(tf.square(x_tf)+tf.square(y_tf))), tf.atan2(y_tf/x_tf)).numpy().reshape(Nr, Ntheta)
+U_pred = u1(tf.atan(tf.sqrt(tf.square(x_tf)+tf.square(y_tf))), tf.atan2(y_tf, x_tf)).numpy().reshape(Nr, Ntheta)
+U_true = tru(tf.atan(tf.sqrt(tf.square(x_tf)+tf.square(y_tf))), tf.atan2(y_tf, x_tf)).numpy().reshape(Nr, Ntheta)
 E = np.abs(U_pred-U_true)
 
 # === Obtain the L-1, L-2, L-inf norms ===
