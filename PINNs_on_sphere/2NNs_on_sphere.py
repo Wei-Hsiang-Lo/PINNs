@@ -196,7 +196,8 @@ ax.scatter(np.sin(theta_south)*np.cos(phi_south), np.sin(theta_south)*np.sin(phi
 ax.set_xlabel('X')
 ax.set_ylabel('Y')
 ax.set_zlabel('Z')
-plt.show()
+fig.savefig("scatter_plot(south_hemisphere).png")
+plt.close(fig)
 
 # =============================
 # Data Generation for NN_2
@@ -225,7 +226,8 @@ ax.scatter(np.sin(theta_north)*np.cos(phi_north), np.sin(theta_north)*np.sin(phi
 ax.set_xlabel('X')
 ax.set_ylabel('Y')  
 ax.set_zlabel('Z')
-plt.show()
+fig.savefig("scatter_plot(north_hemisphere).png")
+plt.close(fig)
 
 # Convert np arrays to tf tensors
 theta_eq, phi_eq, theta_south, phi_south, theta_north, phi_north = map(lambda x: tf.convert_to_tensor(x, dtype=tf.float64), [theta_eq, phi_eq, theta_south, phi_south, theta_north, phi_north])
@@ -248,12 +250,12 @@ def DNN_builder(name, in_shape = 2, out_shape = 1, hidden_layers = 6, neurons = 
     return model
 
 tf.keras.backend.clear_session()
-model_1 = DNN_builder(f"DNN-1{6}", 2, 1, 6, 32, "tanh")
+model_1 = DNN_builder(f"DNN-1", 2, 1, 6, 32, "tanh")
 model_1.summary()
 tf.keras.utils.plot_model(model_1, show_shapes=True, show_layer_names=True, show_dtype=True, show_layer_activations=True)
 
 tf.keras.backend.clear_session()
-model_2 = DNN_builder(f"DNN-2{6}", 2, 1, 6, 32, "tanh")
+model_2 = DNN_builder(f"DNN-2", 2, 1, 6, 32, "tanh")
 model_2.summary()
 tf.keras.utils.plot_model(model_2, show_shapes=True, show_layer_names=True, show_dtype=True, show_layer_activations=True)
 
@@ -298,6 +300,7 @@ def f1(theta, phi):
 
         F1=g_uu + g_vv - (tru_ut*t_u+tru_up*p_u + tru_vt*t_v + tru_vp*p_v)
         retour = tf.reduce_mean(tf.square(F1))
+    del tape
     return retour
 
 @tf.function
@@ -340,6 +343,7 @@ def f2(theta, phi):
 
         F2=g_uu + g_vv - (tru_ut*t_u+tru_up*p_u + tru_vt*t_v + tru_vp*p_v)
         retour = tf.reduce_mean(tf.square(F2))
+    del tape
     return retour
 
 # Data_Loss of the neural networks
@@ -359,6 +363,7 @@ loss_values = np.array([]) #total
 L1_values = np.array([]) #PDE loss of NN_1
 L2_values = np.array([]) #PDE loss of NN_2
 l_values = np.array([]) #Mse loss between NN_1 and NN_2 at boundary points
+history_rows = [] # For recording training history and output it
 
 # Record the start time of training NN_2
 start = time.time()
@@ -382,13 +387,18 @@ for epoch in range(epochs):
     g2 = tape.gradient(loss, model_2.trainable_weights)
     opt2.apply_gradients(zip(g2, model_2.trainable_weights))
 
-    if epoch % 100 == 0 or epoch == epochs - 1:
-        print(f"{epoch:5}, {loss.numpy():.9f}")
+    if epoch == 0:
+        print("Training progress:\n")
+
+    if epoch % 500 == 0 or epoch == epochs - 1:
+        new_row = {"Epoch": epoch, "Total loss": loss.numpy(), "PDE loss(NN1)": L1.numpy(), "PDE loss(NN2)": L2.numpy(), "Data loss": l.numpy()}
+        history_rows.append(new_row)
         loss_values = np.append(loss_values, loss)
         L1_values = np.append(L1_values, L1)
         L2_values = np.append(L2_values, L2)
         l_values = np.append(l_values, l)
-
+        print(pd.DataFrame(history_rows).to_string(index=False, float_format="{:.10e}".format))
+    
 # Record the end time of training NN_2
 end = time.time()
 computation_time_NN2 = {}
@@ -405,7 +415,8 @@ plt.xlabel("Epochs"r'($\times 100$)', fontsize=16)
 plt.legend()
 plt.title("Training Loss Curves", fontsize=16)
 plt.grid(True)
-plt.show()
+plt.savefig("loss_curves.png")
+plt.close(fig)
 
 # ============================
 # Use Simpson's Rule to calculate the error
