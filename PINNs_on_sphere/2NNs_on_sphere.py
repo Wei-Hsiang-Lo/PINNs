@@ -3,7 +3,6 @@ import time
 import pandas as pd
 import tensorflow as tf
 import matplotlib.pyplot as plt
-from matplotlib import cm
 from scipy.stats import qmc
 from scipy import integrate
 
@@ -38,7 +37,7 @@ def trudp(theta, phi):
 
 @tf.function
 def trudtt(theta, phi):
-    eps = tf.constant(1e-12, dtype=tf.float64)  # 避免除以零
+    eps = tf.constant(1e-6, dtype=tf.float64)  # 避免除以零
     denom = tf.maximum(1 - tf.cos(theta), eps)
 
     sin_theta = tf.sin(theta)
@@ -78,7 +77,7 @@ def trudtt(theta, phi):
 
 @tf.function
 def trudtp(theta, phi):
-    eps = tf.constant(1e-12, dtype=tf.float64)  # 防止除以零
+    eps = tf.constant(1e-6, dtype=tf.float64)  # 防止除以零
     denom = tf.maximum(1 - tf.cos(theta), eps)
 
     sin_theta = tf.sin(theta)
@@ -105,7 +104,7 @@ def trudtp(theta, phi):
 
 @tf.function
 def trudpt(theta, phi):
-    eps = tf.constant(1e-12, dtype=tf.float64)  # 避免除以0
+    eps = tf.constant(1e-6, dtype=tf.float64)  # 避免除以0
     denom = tf.maximum(1 - tf.cos(theta), eps)
 
     sin_theta = tf.sin(theta)
@@ -132,7 +131,7 @@ def trudpt(theta, phi):
 
 @tf.function
 def trudpp(theta, phi):
-    eps = tf.constant(1e-12, dtype=tf.float64)  # 避免除以零
+    eps = tf.constant(1e-6, dtype=tf.float64)  # 避免除以零
     denom = tf.maximum(1 - tf.cos(theta), eps)
 
     sin_theta = tf.sin(theta)
@@ -250,12 +249,12 @@ def DNN_builder(name, in_shape = 2, out_shape = 1, hidden_layers = 6, neurons = 
     return model
 
 tf.keras.backend.clear_session()
-model_1 = DNN_builder(f"DNN-1", 2, 1, 6, 64, "tanh")
+model_1 = DNN_builder(f"DNN-1", 2, 1, 6, 32, "tanh")
 model_1.summary()
 tf.keras.utils.plot_model(model_1, show_shapes=True, show_layer_names=True, show_dtype=True, show_layer_activations=True)
 
 tf.keras.backend.clear_session()
-model_2 = DNN_builder(f"DNN-2", 2, 1, 6, 64, "tanh")
+model_2 = DNN_builder(f"DNN-2", 2, 1, 6, 32, "tanh")
 model_2.summary()
 tf.keras.utils.plot_model(model_2, show_shapes=True, show_layer_names=True, show_dtype=True, show_layer_activations=True)
 
@@ -365,6 +364,17 @@ L2_values = np.array([]) #PDE loss of NN_2
 l_values = np.array([]) #Mse loss between NN_1 and NN_2 at boundary points
 history_rows = [] # For recording training history and output it
 
+# ============================
+# Check the weight of the model
+# ============================
+def check_model_finite(model, name):
+    for i, w in enumerate(model.get_weights()):
+        w = np.array(w)
+        if not np.all(np.isfinite(w)):
+            print(f"[ERROR] {name} weight #{i} contains NaN/Inf!")
+            return False
+    return True
+
 # Record the start time of training NN_2
 start = time.time()
 # First, we need to train NN_2 first to get its approximation of true_u
@@ -397,8 +407,13 @@ for epoch in range(epochs):
         L1_values = np.append(L1_values, L1)
         L2_values = np.append(L2_values, L2)
         l_values = np.append(l_values, l)
-        print(pd.DataFrame(history_rows).to_string(index=False, float_format="{:.10e}".format))
-        print("=" * 70)
+        print(pd.DataFrame(history_rows).to_string(index=False, float_format="{:.8e}".format))
+        print("=" * 80)
+        # Check if the model parameters are finite
+        ok1 = check_model_finite(model_1, "NN_1")
+        ok2 = check_model_finite(model_2, "NN_2")
+        if not (ok1 and ok2):
+            print(f"錯誤：網路參數在 epoch {epoch} 時已經爆掉！")
     
 # Record the end time of training NN_2
 end = time.time()
@@ -426,7 +441,7 @@ plt.close(fig)
 Nr = 151
 Ntheta = 101
 
-r = np.linspace(0, 1, Nr)
+r = np.linspace(1e-4, 1, Nr)  # Avoid r=0 singularity
 theta = np.linspace(0, 2*np.pi, Ntheta)
 R_, Theta_ = np.meshgrid(r, theta, indexing='ij')
 X = R_*np.cos(Theta_)
@@ -436,14 +451,24 @@ Y = R_*np.sin(Theta_)
 x_tf = tf.convert_to_tensor(X.flatten().reshape(-1, 1), dtype=tf.float64)
 y_tf = tf.convert_to_tensor(Y.flatten().reshape(-1, 1), dtype=tf.float64)
 
-U_pred = u1(tf.atan(tf.sqrt(tf.square(x_tf)+tf.square(y_tf))), tf.atan2(y_tf, x_tf)).numpy().reshape(Nr, Ntheta)
-U_true = tru(tf.atan(tf.sqrt(tf.square(x_tf)+tf.square(y_tf))), tf.atan2(y_tf, x_tf)).numpy().reshape(Nr, Ntheta)
+# Transform the coordinate from sphere to R^2
+theta_tf = tf.math.atan(tf.sqrt(tf.square(x_tf) + tf.square(y_tf)))
+phi_tf = tf.where((x_tf==0.0) & (y_tf==0), 0.0, tf.atan2(y_tf, x_tf))
+
+U_pred = u1(theta_tf, phi_tf).numpy().reshape(Nr, Ntheta)
+U_true = tru(theta_tf, phi_tf).numpy().reshape(Nr, Ntheta)
 E = np.abs(U_pred-U_true)
 
+# Check if the value is Nan
+print("Checking U_pred / U_true before integration...")
+print("U_pred finite?", np.all(np.isfinite(U_pred)))
+print("U_true finite?", np.all(np.isfinite(U_true)))
+print("E finite?", np.all(np.isfinite(E)))
+
 # === Obtain the L-1, L-2, L-inf norms ===
-L1_norm = integrate.simpson(integrate.simpson(E * R_, theta), r)
-L2_norm = np.sqrt(integrate.simpson(integrate.simpson(E**2 * R_, theta), r))
-Linf_norm = np.max(E)
+L1_norm = integrate.simpson(integrate.simpson(E * R_, r, axis=0), theta)
+L2_norm = np.sqrt(integrate.simpson(integrate.simpson(E**2 * R_, r, axis=0), theta))
+Linf_norm = np.max(E) 
 
 print(f"L1 norm: {L1_norm:.5e}")
 print(f"L2 norm: {L2_norm:.5e}")
